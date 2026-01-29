@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARC Raiders Skill Tree Builder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700;800;900&family=Urbanist:wght@300&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="skill-tree-wrapper">
+        <!-- Header Controls -->
+        <div class="header-controls">
+            <button id="resetBtn" class="header-btn">RESET</button>
+            <button id="shareBtn" class="header-btn">SHARE</button>
+            <div id="pointsCounter" class="points-counter">
+                <span id="pointsRemaining">76</span> / <span id="maxPoints">76</span>
+                <div id="pointsPopup" class="points-popup">
+                    <div class="popup-title">Edit max points</div>
+                    <div class="popup-controls">
+                        <button id="decreaseMaxBtn" class="popup-btn">−</button>
+                        <input type="number" id="maxPointsInput" value="76" min="1">
+                        <button id="increaseMaxBtn" class="popup-btn">+</button>
+                    </div>
+                    <div class="popup-hint">
+                        <div>Lvl 75: 76 points</div>
+                        <div>Lvl 75 + Expedition 5 points: 81 points</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <canvas id="skillTreeCanvas"></canvas>
+
+        <!-- Branch Labels are now drawn on Canvas for proper pan/zoom -->
+
+        <!-- Tooltip -->
+        <div class="tooltip" id="tooltip">
+            <div class="tooltip-name" id="tooltipName">Skill Name</div>
+            <div class="tooltip-desc" id="tooltipDesc">Description</div>
+        </div>
+
+        <!-- Floating particles container -->
+        <div class="particles" id="particles"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
