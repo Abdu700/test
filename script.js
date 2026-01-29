@@ -167,6 +167,7 @@ let offsetX = 0;
 let offsetY = 0;
 let isDragging = false;
 let dragStart = { x: 0, y: 0 };
+let mouseDownPos = { x: 0, y: 0 }; // Track initial click position to distinguish drag from click
 let hoveredNode = null;
 let loadedImages = {};
 
@@ -195,8 +196,14 @@ let iconsLoaded = false;
 
 // === MOBILE SMOOTHNESS STATE (Phase 3 Optimization) ===
 let isMoving = false;                   // Motion state for shadow throttling
+let velocityX = 0, velocityY = 0;       // For inertia panning
+let lastTouchX = 0, lastTouchY = 0;     // Last touch position
+let lastTouchMoveTime = 0;              // For velocity calculation
+const FRICTION = 0.93;                  // Momentum decay per frame (higher = slides longer)
+const VELOCITY_THRESHOLD = 0.5;         // Min velocity to start inertia
 let targetScale = 1;                    // For smooth zoom lerp
 const ZOOM_LERP_FACTOR = 0.15;          // Zoom smoothing factor
+let inertiaAnimationId = null;          // RAF ID for cleanup
 
 function initializeState() {
     state.skills = {};
@@ -905,29 +912,27 @@ canvas.addEventListener('mousemove', (e) => {
         draw();
     }
 
-    if (node) {
-        showTooltip(node);
-        canvas.style.cursor = getNodeState(node) !== 'locked' ? 'pointer' : 'not-allowed';
-    } else {
-        hideTooltip();
-        canvas.style.cursor = isDragging ? 'grabbing' : 'grab';
-    }
-
     if (isDragging) {
         offsetX = e.clientX - dragStart.x;
         offsetY = e.clientY - dragStart.y;
         draw();
+        canvas.style.cursor = 'grabbing';
+        hideTooltip(); // Hide tooltip while dragging
+    } else if (node) {
+        showTooltip(node);
+        canvas.style.cursor = getNodeState(node) !== 'locked' ? 'pointer' : 'not-allowed';
+    } else {
+        hideTooltip();
+        canvas.style.cursor = 'grab';
     }
 });
 
 canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0) { // Left click
-        const node = getNodeAt(e.clientX, e.clientY);
-        if (!node) {
-            isDragging = true;
-            dragStart = { x: e.clientX - offsetX, y: e.clientY - offsetY };
-            canvas.style.cursor = 'grabbing';
-        }
+        isDragging = true;
+        dragStart = { x: e.clientX - offsetX, y: e.clientY - offsetY };
+        mouseDownPos = { x: e.clientX, y: e.clientY };
+        canvas.style.cursor = 'grabbing';
     }
 });
 
@@ -937,6 +942,10 @@ canvas.addEventListener('mouseup', (e) => {
 });
 
 canvas.addEventListener('click', (e) => {
+    // Check if the user was dragging or just clicking
+    const dist = Math.hypot(e.clientX - mouseDownPos.x, e.clientY - mouseDownPos.y);
+    if (dist > 5) return; // Ignore clicks if the mouse moved more than 5px (panning)
+
     const node = getNodeAt(e.clientX, e.clientY);
     if (node && canUpgrade(node)) {
         const s = state.skills[node.id];
@@ -1065,11 +1074,33 @@ canvas.addEventListener('touchmove', (e) => {
         if (distance > TAP_THRESHOLD) {
             clearTimeout(longPressTimeout);
 
+            // Cancel any running inertia animation
+            if (inertiaAnimationId) {
+                cancelAnimationFrame(inertiaAnimationId);
+                inertiaAnimationId = null;
+            }
+
             if (!isTouchPanning) {
                 // Start panning from current position
                 isTouchPanning = true;
                 dragStart = { x: touch.clientX - offsetX, y: touch.clientY - offsetY };
+                // Initialize velocity tracking
+                lastTouchX = touch.clientX;
+                lastTouchY = touch.clientY;
+                lastTouchMoveTime = now;
             } else {
+                // Calculate velocity for inertia (mobile only)
+                if (isMobile && lastTouchMoveTime > 0) {
+                    const dt = now - lastTouchMoveTime;
+                    if (dt > 0 && dt < 100) { // Ignore stale data
+                        velocityX = (touch.clientX - lastTouchX) / dt * 16; // Normalize to ~60fps
+                        velocityY = (touch.clientY - lastTouchY) / dt * 16;
+                    }
+                }
+                lastTouchX = touch.clientX;
+                lastTouchY = touch.clientY;
+                lastTouchMoveTime = now;
+
                 // Set motion state for shadow throttling
                 isMoving = true;
 
@@ -1151,8 +1182,9 @@ canvas.addEventListener('touchend', (e) => {
         // No inertia for taps
         isMoving = false;
     } else if (isTouchPanning && isMobile) {
-        // No inertia - stop immediately to prevent lagging (mobile only)
+        // No inertia - stop immediately (Inertia removed for mobile performance)
         isMoving = false;
+        velocityX = velocityY = 0;
         draw();
     } else {
         // Desktop or no panning - just reset
@@ -1164,16 +1196,24 @@ canvas.addEventListener('touchend', (e) => {
     isTouchPanning = false;
     initialPinchDistance = 0;
     lastTouchCenter = null;
+    lastTouchMoveTime = 0;
 });
 
 canvas.addEventListener('touchcancel', (e) => {
     clearTimeout(longPressTimeout);
+    // Cancel any running inertia
+    if (inertiaAnimationId) {
+        cancelAnimationFrame(inertiaAnimationId);
+        inertiaAnimationId = null;
+    }
     // Reset all touch and smoothness state
     touchStartPos = null;
     isTouchPanning = false;
     initialPinchDistance = 0;
     lastTouchCenter = null;
+    lastTouchMoveTime = 0;
     isMoving = false;
+    velocityX = velocityY = 0;
 });
 
 // === UI CONTROLS (Reset, Share, Points Counter) ===
