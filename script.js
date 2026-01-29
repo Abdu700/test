@@ -195,14 +195,8 @@ let iconsLoaded = false;
 
 // === MOBILE SMOOTHNESS STATE (Phase 3 Optimization) ===
 let isMoving = false;                   // Motion state for shadow throttling
-let velocityX = 0, velocityY = 0;       // For inertia panning
-let lastTouchX = 0, lastTouchY = 0;     // Last touch position
-let lastTouchMoveTime = 0;              // For velocity calculation
-const FRICTION = 0.93;                  // Momentum decay per frame (higher = slides longer)
-const VELOCITY_THRESHOLD = 0.5;         // Min velocity to start inertia
 let targetScale = 1;                    // For smooth zoom lerp
 const ZOOM_LERP_FACTOR = 0.15;          // Zoom smoothing factor
-let inertiaAnimationId = null;          // RAF ID for cleanup
 
 function initializeState() {
     state.skills = {};
@@ -1071,33 +1065,11 @@ canvas.addEventListener('touchmove', (e) => {
         if (distance > TAP_THRESHOLD) {
             clearTimeout(longPressTimeout);
 
-            // Cancel any running inertia animation
-            if (inertiaAnimationId) {
-                cancelAnimationFrame(inertiaAnimationId);
-                inertiaAnimationId = null;
-            }
-
             if (!isTouchPanning) {
                 // Start panning from current position
                 isTouchPanning = true;
                 dragStart = { x: touch.clientX - offsetX, y: touch.clientY - offsetY };
-                // Initialize velocity tracking
-                lastTouchX = touch.clientX;
-                lastTouchY = touch.clientY;
-                lastTouchMoveTime = now;
             } else {
-                // Calculate velocity for inertia (mobile only)
-                if (isMobile && lastTouchMoveTime > 0) {
-                    const dt = now - lastTouchMoveTime;
-                    if (dt > 0 && dt < 100) { // Ignore stale data
-                        velocityX = (touch.clientX - lastTouchX) / dt * 16; // Normalize to ~60fps
-                        velocityY = (touch.clientY - lastTouchY) / dt * 16;
-                    }
-                }
-                lastTouchX = touch.clientX;
-                lastTouchY = touch.clientY;
-                lastTouchMoveTime = now;
-
                 // Set motion state for shadow throttling
                 isMoving = true;
 
@@ -1179,37 +1151,9 @@ canvas.addEventListener('touchend', (e) => {
         // No inertia for taps
         isMoving = false;
     } else if (isTouchPanning && isMobile) {
-        // Start inertia animation if velocity is significant
-        const speed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
-
-        if (speed > VELOCITY_THRESHOLD) {
-            function inertiaLoop() {
-                velocityX *= FRICTION;
-                velocityY *= FRICTION;
-                offsetX += velocityX;
-                offsetY += velocityY;
-
-                const currentSpeed = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
-
-                // Continue or stop
-                if (currentSpeed > 0.1) {
-                    draw();
-                    inertiaAnimationId = requestAnimationFrame(inertiaLoop);
-                } else {
-                    // Motion stopped - render full quality
-                    isMoving = false;
-                    velocityX = velocityY = 0;
-                    inertiaAnimationId = null;
-                    draw(); // Final high-quality render
-                }
-            }
-            inertiaAnimationId = requestAnimationFrame(inertiaLoop);
-        } else {
-            // No significant velocity - stop immediately
-            isMoving = false;
-            velocityX = velocityY = 0;
-            draw();
-        }
+        // No inertia - stop immediately to prevent lagging (mobile only)
+        isMoving = false;
+        draw();
     } else {
         // Desktop or no panning - just reset
         isMoving = false;
@@ -1220,24 +1164,16 @@ canvas.addEventListener('touchend', (e) => {
     isTouchPanning = false;
     initialPinchDistance = 0;
     lastTouchCenter = null;
-    lastTouchMoveTime = 0;
 });
 
 canvas.addEventListener('touchcancel', (e) => {
     clearTimeout(longPressTimeout);
-    // Cancel any running inertia
-    if (inertiaAnimationId) {
-        cancelAnimationFrame(inertiaAnimationId);
-        inertiaAnimationId = null;
-    }
     // Reset all touch and smoothness state
     touchStartPos = null;
     isTouchPanning = false;
     initialPinchDistance = 0;
     lastTouchCenter = null;
-    lastTouchMoveTime = 0;
     isMoving = false;
-    velocityX = velocityY = 0;
 });
 
 // === UI CONTROLS (Reset, Share, Points Counter) ===
